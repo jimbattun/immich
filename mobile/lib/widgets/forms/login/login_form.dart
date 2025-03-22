@@ -24,7 +24,6 @@ import 'package:immich_mobile/widgets/forms/login/loading_icon.dart';
 import 'package:immich_mobile/widgets/forms/login/login_button.dart';
 import 'package:immich_mobile/widgets/forms/login/o_auth_login_button.dart';
 import 'package:immich_mobile/widgets/forms/login/password_input.dart';
-import 'package:immich_mobile/widgets/forms/login/server_endpoint_input.dart';
 import 'package:logging/logging.dart';
 import 'package:openapi/api.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -41,11 +40,11 @@ class LoginForm extends HookConsumerWidget {
         useTextEditingController.fromValue(TextEditingValue.empty);
     final passwordController =
         useTextEditingController.fromValue(TextEditingValue.empty);
+    // Контроллер для серверного URL – теперь он задаётся жёстко
     final serverEndpointController =
         useTextEditingController.fromValue(TextEditingValue.empty);
     final emailFocusNode = useFocusNode();
     final passwordFocusNode = useFocusNode();
-    final serverEndpointFocusNode = useFocusNode();
     final isLoading = useState<bool>(false);
     final isLoadingServer = useState<bool>(false);
     final isOauthEnable = useState<bool>(false);
@@ -57,9 +56,11 @@ class LoginForm extends HookConsumerWidget {
     final serverInfo = ref.watch(serverInfoProvider);
     final warningMessage = useState<String?>(null);
     final loginFormKey = GlobalKey<FormState>();
+    // Значение серверного URL хранится здесь (после валидации)
     final ValueNotifier<String?> serverEndpoint = useState<String?>(null);
 
-    checkVersionMismatch() async {
+    // Проверка совместимости версий приложения и сервера
+    Future<void> checkVersionMismatch() async {
       try {
         final packageInfo = await PackageInfo.fromPlatform();
         final appVersion = packageInfo.version;
@@ -79,26 +80,18 @@ class LoginForm extends HookConsumerWidget {
       }
     }
 
-    /// Fetch the server login credential and enables oAuth login if necessary
-    /// Returns true if successful, false otherwise
+    /// Получение настроек авторизации сервера с использованием хардкоденного URL
     Future<void> getServerAuthSettings() async {
-      final serverUrl = sanitizeUrl(serverEndpointController.text);
-
-      // Guard empty URL
-      if (serverUrl.isEmpty) {
-        ImmichToast.show(
-          context: context,
-          msg: "login_form_server_empty".tr(),
-          toastType: ToastType.error,
-        );
-      }
+      // Задаём жёсткий URL сервера (без "/api" – он будет добавлен при валидации)
+      final serverUrl = "https://api.myclick.app";
 
       try {
         isLoadingServer.value = true;
+        // Функция validateServerUrl должна возвращать конечный URL (например, с "/api")
         final endpoint =
             await ref.read(authProvider.notifier).validateServerUrl(serverUrl);
 
-        // Fetch and load server config and features
+        // Загружаем конфигурацию сервера и его возможности
         await ref.read(serverInfoProvider.notifier).getServerInfo();
 
         final serverInfo = ref.read(serverInfoProvider);
@@ -121,7 +114,6 @@ class LoginForm extends HookConsumerWidget {
         );
         isOauthEnable.value = false;
         isPasswordLoginEnable.value = true;
-        isLoadingServer.value = false;
       } on HandshakeException {
         ImmichToast.show(
           context: context,
@@ -131,7 +123,6 @@ class LoginForm extends HookConsumerWidget {
         );
         isOauthEnable.value = false;
         isPasswordLoginEnable.value = true;
-        isLoadingServer.value = false;
       } catch (e) {
         ImmichToast.show(
           context: context,
@@ -141,41 +132,36 @@ class LoginForm extends HookConsumerWidget {
         );
         isOauthEnable.value = false;
         isPasswordLoginEnable.value = true;
+      } finally {
         isLoadingServer.value = false;
       }
-
-      isLoadingServer.value = false;
     }
 
-    useEffect(
-      () {
-        final serverUrl = getServerUrl();
-        if (serverUrl != null) {
-          serverEndpointController.text = serverUrl;
-        }
-        return null;
-      },
-      [],
-    );
+    // При первом построении виджета сразу задаём жесткий URL и вызываем конфигурацию сервера
+    useEffect(() {
+      const hardcodedServerUrl = "https://api.myclick.app";
+      serverEndpointController.text = hardcodedServerUrl;
+      serverEndpoint.value = hardcodedServerUrl;
+      getServerAuthSettings();
+      return null;
+    }, []);
 
-    populateTestLoginInfo() {
+    // Функции для тестового заполнения (опционально)
+    void populateTestLoginInfo() {
       emailController.text = 'demo@immich.app';
       passwordController.text = 'demo';
-      serverEndpointController.text = 'https://demo.immich.app';
     }
 
-    populateTestLoginInfo1() {
+    void populateTestLoginInfo1() {
       emailController.text = 'testuser@email.com';
       passwordController.text = 'password';
-      serverEndpointController.text = 'http://10.1.15.216:2283/api';
     }
 
-    login() async {
+    Future<void> login() async {
       TextInput.finishAutofillContext();
-
       isLoading.value = true;
 
-      // Invalidate all api repository provider instance to take into account new access token
+      // Сброс кеша провайдеров API для учёта нового токена
       invalidateAllApiRepositoryProviders(ref);
 
       try {
@@ -201,18 +187,16 @@ class LoginForm extends HookConsumerWidget {
       }
     }
 
-    oAuthLogin() async {
-      var oAuthService = ref.watch(oAuthServiceProvider);
+    Future<void> oAuthLogin() async {
+      final oAuthService = ref.watch(oAuthServiceProvider);
       String? oAuthServerUrl;
 
       try {
-        oAuthServerUrl = await oAuthService
-            .getOAuthServerUrl(sanitizeUrl(serverEndpointController.text));
-
+        oAuthServerUrl =
+            await oAuthService.getOAuthServerUrl("https://api.myclick.app");
         isLoading.value = true;
       } catch (error, stack) {
         log.severe('Error getting OAuth server Url: $error', stack);
-
         ImmichToast.show(
           context: context,
           msg: "login_form_failed_get_oauth_server_config".tr(),
@@ -225,23 +209,16 @@ class LoginForm extends HookConsumerWidget {
 
       if (oAuthServerUrl != null) {
         try {
-          final loginResponseDto =
-              await oAuthService.oAuthLogin(oAuthServerUrl);
-
-          if (loginResponseDto == null) {
-            return;
-          }
+          final loginResponseDto = await oAuthService.oAuthLogin(oAuthServerUrl);
+          if (loginResponseDto == null) return;
 
           log.info(
-            "Finished OAuth login with response: ${loginResponseDto.userEmail}",
-          );
-
-          final isSuccess = await ref.watch(authProvider.notifier).saveAuthInfo(
-                accessToken: loginResponseDto.accessToken,
-              );
+              "Finished OAuth login with response: ${loginResponseDto.userEmail}");
+          final isSuccess = await ref
+              .watch(authProvider.notifier)
+              .saveAuthInfo(accessToken: loginResponseDto.accessToken);
 
           if (isSuccess) {
-            isLoading.value = false;
             final permission = ref.watch(galleryPermissionNotifier);
             if (permission.isGranted || permission.isLimited) {
               ref.watch(backupProvider.notifier).resumeBackup();
@@ -250,7 +227,6 @@ class LoginForm extends HookConsumerWidget {
           }
         } catch (error, stack) {
           log.severe('Error logging in with OAuth: $error', stack);
-
           ImmichToast.show(
             context: context,
             msg: error.toString(),
@@ -268,105 +244,18 @@ class LoginForm extends HookConsumerWidget {
           gravity: ToastGravity.TOP,
         );
         isLoading.value = false;
-        return;
       }
     }
 
-    buildSelectServer() {
-      const buttonRadius = 25.0;
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          ServerEndpointInput(
-            controller: serverEndpointController,
-            focusNode: serverEndpointFocusNode,
-            onSubmit: getServerAuthSettings,
-          ),
-          const SizedBox(height: 18),
-          Row(
-            children: [
-              Expanded(
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: const RoundedRectangleBorder(
-                      borderRadius: BorderRadius.only(
-                        topLeft: Radius.circular(buttonRadius),
-                        bottomLeft: Radius.circular(buttonRadius),
-                      ),
-                    ),
-                  ),
-                  onPressed: () => context.pushRoute(const SettingsRoute()),
-                  icon: const Icon(Icons.settings_rounded),
-                  label: const SizedBox.shrink(),
-                ),
-              ),
-              const SizedBox(width: 1),
-              Expanded(
-                flex: 3,
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: const RoundedRectangleBorder(
-                      borderRadius: BorderRadius.only(
-                        topRight: Radius.circular(buttonRadius),
-                        bottomRight: Radius.circular(buttonRadius),
-                      ),
-                    ),
-                  ),
-                  onPressed:
-                      isLoadingServer.value ? null : getServerAuthSettings,
-                  icon: const Icon(Icons.arrow_forward_rounded),
-                  label: const Text(
-                    'login_form_next_button',
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-                  ).tr(),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 18),
-          if (isLoadingServer.value) const LoadingIcon(),
-        ],
-      );
-    }
-
-    buildVersionCompatWarning() {
-      checkVersionMismatch();
-
-      if (warningMessage.value == null) {
-        return const SizedBox.shrink();
-      }
-
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 8.0),
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color:
-                context.isDarkTheme ? Colors.red.shade700 : Colors.red.shade100,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color:
-                  context.isDarkTheme ? Colors.red.shade900 : Colors.red[200]!,
-            ),
-          ),
-          child: Text(
-            warningMessage.value!,
-            textAlign: TextAlign.center,
-          ),
-        ),
-      );
-    }
-
-    buildLogin() {
+    // Форма логина (без экрана выбора сервера)
+    Widget buildLogin() {
       return AutofillGroup(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             buildVersionCompatWarning(),
             Text(
-              sanitizeUrl(serverEndpointController.text),
+              "https://api.myclick.app",
               style: context.textTheme.displaySmall,
               textAlign: TextAlign.center,
             ),
@@ -384,14 +273,10 @@ class LoginForm extends HookConsumerWidget {
                 onSubmit: login,
               ),
             ],
-
-            // Note: This used to have an AnimatedSwitcher, but was removed
-            // because of https://github.com/flutter/flutter/issues/120874
             isLoading.value
                 ? const LoadingIcon()
                 : Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
-                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       const SizedBox(height: 18),
                       if (isPasswordLoginEnable.value)
@@ -399,9 +284,8 @@ class LoginForm extends HookConsumerWidget {
                       if (isOauthEnable.value) ...[
                         if (isPasswordLoginEnable.value)
                           Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16.0,
-                            ),
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 16.0),
                             child: Divider(
                               color: context.isDarkTheme
                                   ? Colors.white
@@ -417,23 +301,13 @@ class LoginForm extends HookConsumerWidget {
                       ],
                     ],
                   ),
-            if (!isOauthEnable.value && !isPasswordLoginEnable.value)
-              Center(
-                child: const Text('login_disabled').tr(),
-              ),
-            const SizedBox(height: 12),
-            TextButton.icon(
-              icon: const Icon(Icons.arrow_back),
-              onPressed: () => serverEndpoint.value = null,
-              label: const Text('login_form_back_button_text').tr(),
-            ),
           ],
         ),
       );
     }
 
-    final serverSelectionOrLogin =
-        serverEndpoint.value == null ? buildSelectServer() : buildLogin();
+    // Всегда отображаем форму логина
+    final loginWidget = buildLogin();
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -443,23 +317,17 @@ class LoginForm extends HookConsumerWidget {
               constraints: const BoxConstraints(maxWidth: 300),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
-                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  SizedBox(
-                    height: constraints.maxHeight / 5,
-                  ),
+                  SizedBox(height: constraints.maxHeight / 5),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.center,
-                    mainAxisAlignment: MainAxisAlignment.end,
                     children: [
                       GestureDetector(
-                        onDoubleTap: () => populateTestLoginInfo(),
-                        onLongPress: () => populateTestLoginInfo1(),
+                        onDoubleTap: populateTestLoginInfo,
+                        onLongPress: populateTestLoginInfo1,
                         child: RotationTransition(
                           turns: logoAnimationController,
-                          child: const ImmichLogo(
-                            heroTag: 'logo',
-                          ),
+                          child: const ImmichLogo(heroTag: 'logo'),
                         ),
                       ),
                       const Padding(
@@ -468,13 +336,7 @@ class LoginForm extends HookConsumerWidget {
                       ),
                     ],
                   ),
-
-                  // Note: This used to have an AnimatedSwitcher, but was removed
-                  // because of https://github.com/flutter/flutter/issues/120874
-                  Form(
-                    key: loginFormKey,
-                    child: serverSelectionOrLogin,
-                  ),
+                  Form(key: loginFormKey, child: loginWidget),
                 ],
               ),
             ),
@@ -482,5 +344,10 @@ class LoginForm extends HookConsumerWidget {
         );
       },
     );
+  }
+
+  Widget buildVersionCompatWarning() {
+    // Если необходимо, можно реализовать предупреждение о несовместимости версий.
+    return const SizedBox.shrink();
   }
 }

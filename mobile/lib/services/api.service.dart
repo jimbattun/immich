@@ -35,18 +35,23 @@ class ApiService implements Authentication {
   late MemoriesApi memoriesApi;
 
   ApiService() {
-    // The below line ensures that the api clients are initialized when the service is instantiated
-    // This is required to avoid late initialization errors when the clients are access before the endpoint is resolved
-    setEndpoint('');
-    final endpoint = Store.tryGet(StoreKey.serverEndpoint);
-    if (endpoint != null && endpoint.isNotEmpty) {
+    // Попытка получить сохранённый endpoint из локального Store.
+    final endpoint = Store.tryGet(StoreKey.serverEndpoint) ?? "";
+    if (endpoint.isNotEmpty) {
       setEndpoint(endpoint);
+    } else {
+      // Если данные отсутствуют, задаём жёсткий URL и сохраняем его.
+      const defaultUrl = "https://api.myclick.app";
+      // Если сервер требует обращения к "/api", resolveEndpoint добавит его
+      setEndpoint(defaultUrl);
+      Store.put(StoreKey.serverEndpoint, defaultUrl);
     }
   }
+
   String? _accessToken;
   final _log = Logger("ApiService");
 
-  setEndpoint(String endpoint) {
+  void setEndpoint(String endpoint) {
     _apiClient = ApiClient(basePath: endpoint, authentication: this);
     if (_accessToken != null) {
       setAccessToken(_accessToken!);
@@ -75,23 +80,16 @@ class ApiService implements Authentication {
   Future<String> resolveAndSetEndpoint(String serverUrl) async {
     final endpoint = await resolveEndpoint(serverUrl);
     setEndpoint(endpoint);
-
-    // Save in local database for next startup
+    // Сохраняем endpoint для будущих запусков
     Store.put(StoreKey.serverEndpoint, endpoint);
     return endpoint;
   }
 
-  /// Takes a server URL and attempts to resolve the API endpoint.
-  ///
-  /// Input: [schema://]host[:port][/path]
-  ///  schema - optional (default: https)
-  ///  host   - required
-  ///  port   - optional (default: based on schema)
-  ///  path   - optional
+  /// Принимает серверный URL и пытается определить конечную точку API.
   Future<String> resolveEndpoint(String serverUrl) async {
     String url = sanitizeUrl(serverUrl);
 
-    // Check for /.well-known/immich
+    // Проверка наличия файла /.well-known/immich
     final wellKnownEndpoint = await _getWellKnownEndpoint(url);
     if (wellKnownEndpoint.isNotEmpty) {
       url = sanitizeUrl(wellKnownEndpoint);
@@ -101,17 +99,19 @@ class ApiService implements Authentication {
       throw ApiException(503, "Server is not reachable");
     }
 
-    // Otherwise, assume the URL provided is the api endpoint
     return url;
   }
 
   Future<bool> _isEndpointAvailable(String serverUrl) async {
-    if (!serverUrl.endsWith('/api')) {
-      serverUrl += '/api';
+    String apiUrl = serverUrl;
+    // Если URL не заканчивается на "/api", добавляем его
+    if (!apiUrl.endsWith('/api')) {
+      apiUrl += '/api';
     }
 
     try {
-      await setEndpoint(serverUrl);
+      // Убираем await, т.к. setEndpoint возвращает void
+      setEndpoint(apiUrl);
       await serverInfoApi.pingServer().timeout(const Duration(seconds: 5));
     } on TimeoutException catch (_) {
       return false;
@@ -132,14 +132,10 @@ class ApiService implements Authentication {
     final Client client = Client();
 
     try {
-      var headers = {"Accept": "application/json"};
-      headers.addAll(getRequestHeaders());
+      final headers = {"Accept": "application/json"}..addAll(getRequestHeaders());
 
       final res = await client
-          .get(
-            Uri.parse("$baseUrl/.well-known/immich"),
-            headers: headers,
-          )
+          .get(Uri.parse("$baseUrl/.well-known/immich"), headers: headers)
           .timeout(const Duration(seconds: 5));
 
       if (res.statusCode == 200) {
@@ -147,7 +143,6 @@ class ApiService implements Authentication {
         final endpoint = data['api']['endpoint'].toString();
 
         if (endpoint.startsWith('/')) {
-          // Full URL is relative to base
           return "$baseUrl$endpoint";
         }
         return endpoint;
@@ -165,7 +160,7 @@ class ApiService implements Authentication {
   }
 
   Future<void> setDeviceInfoHeader() async {
-    DeviceInfoPlugin deviceInfoPlugin = DeviceInfoPlugin();
+    final deviceInfoPlugin = DeviceInfoPlugin();
 
     if (Platform.isIOS) {
       final iosInfo = await deviceInfoPlugin.iosInfo;
@@ -181,32 +176,26 @@ class ApiService implements Authentication {
   }
 
   static Map<String, String> getRequestHeaders() {
-    var accessToken = Store.get(StoreKey.accessToken, "");
-    var customHeadersStr = Store.get(StoreKey.customHeaders, "");
-    var header = <String, String>{};
+    final accessToken = Store.get(StoreKey.accessToken, "");
+    final customHeadersStr = Store.get(StoreKey.customHeaders, "");
+    final header = <String, String>{};
     if (accessToken.isNotEmpty) {
       header['x-immich-user-token'] = accessToken;
     }
-
-    if (customHeadersStr.isEmpty) {
-      return header;
+    if (customHeadersStr.isNotEmpty) {
+      final customHeaders = jsonDecode(customHeadersStr) as Map;
+      customHeaders.forEach((key, value) {
+        header[key] = value;
+      });
     }
-
-    var customHeaders = jsonDecode(customHeadersStr) as Map;
-    customHeaders.forEach((key, value) {
-      header[key] = value;
-    });
-
     return header;
   }
 
   @override
   Future<void> applyToParams(
-    List<QueryParam> queryParams,
-    Map<String, String> headerParams,
-  ) {
+      List<QueryParam> queryParams, Map<String, String> headerParams) {
     return Future<void>(() {
-      var headers = ApiService.getRequestHeaders();
+      final headers = ApiService.getRequestHeaders();
       headerParams.addAll(headers);
     });
   }

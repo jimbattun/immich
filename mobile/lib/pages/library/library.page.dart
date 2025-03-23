@@ -81,7 +81,7 @@ class LibraryPage extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: 12),
-            const QuickAccessButtons(),
+            // const QuickAccessButtons(),
             const SizedBox(
               height: 32,
             ),

@@ -14,11 +14,11 @@ import 'package:immich_mobile/widgets/settings/preference_settings/preference_se
 import 'package:immich_mobile/routing/router.dart';
 
 enum SettingSection {
-  advanced(
-    'advanced_settings_tile_title',
-    Icons.build_outlined,
-    "advanced_settings_tile_subtitle",
-  ),
+ // advanced(
+ //   'advanced_settings_tile_title',
+ //   Icons.build_outlined,
+ //   "advanced_settings_tile_subtitle",
+ //  ),
   assetViewer(
     'asset_viewer_settings_title',
     Icons.image_outlined,
@@ -34,11 +34,11 @@ enum SettingSection {
     Icons.language,
     "setting_languages_subtitle",
   ),
-  networking(
-    'networking_settings',
-    Icons.wifi,
-    "networking_subtitle",
-  ),
+//  networking(
+//    'networking_settings',
+//    Icons.wifi,
+ //   "networking_subtitle",
+ // ),
   notifications(
     'setting_notifications_title',
     Icons.notifications_none_rounded,
@@ -60,11 +60,11 @@ enum SettingSection {
   final IconData icon;
 
   Widget get widget => switch (this) {
-        SettingSection.advanced => const AdvancedSettings(),
+      //  SettingSection.advanced => const AdvancedSettings(),
         SettingSection.assetViewer => const AssetViewerSettings(),
         SettingSection.backup => const BackupSettings(),
         SettingSection.languages => const LanguageSettings(),
-        SettingSection.networking => const NetworkingSettings(),
+      //  SettingSection.networking => const NetworkingSettings(),
         SettingSection.notifications => const NotificationSetting(),
         SettingSection.preferences => const PreferenceSetting(),
         SettingSection.timeline => const AssetListSettings(),

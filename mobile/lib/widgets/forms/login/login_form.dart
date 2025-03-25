@@ -254,11 +254,11 @@ class LoginForm extends HookConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             buildVersionCompatWarning(),
-            Text(
-              "https://api.myclick.app",
-              style: context.textTheme.displaySmall,
-              textAlign: TextAlign.center,
-            ),
+          //  Text(
+          //    "https://api.myclick.app",
+          //    style: context.textTheme.displaySmall,
+          //    textAlign: TextAlign.center,
+         //   ),
             if (isPasswordLoginEnable.value) ...[
               const SizedBox(height: 18),
               EmailInput(

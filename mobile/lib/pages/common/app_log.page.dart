@@ -78,21 +78,6 @@ class AppLogPage extends HookConsumerWidget {
               shouldReload.value = !shouldReload.value;
             },
           ),
-          Builder(
-            builder: (BuildContext iconContext) {
-              return IconButton(
-                icon: Icon(
-                  Icons.share_rounded,
-                  color: context.primaryColor,
-                  semanticLabel: "Share logs",
-                  size: 20.0,
-                ),
-                onPressed: () {
-                  ImmichLogger.shareLogs(iconContext);
-                },
-              );
-            },
-          ),
         ],
         leading: IconButton(
           onPressed: () {

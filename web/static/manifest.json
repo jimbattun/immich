@@ -1,6 +1,6 @@
 {
   "background_color": "#ffffff",
-  "description": "Self-hosted photo and video backup solution directly from your mobile phone.",
+  "description": "MVP Cloud Gallery",
   "display": "standalone",
   "icons": [
     {
@@ -29,7 +29,7 @@
     }
   ],
   "lang": "en",
-  "name": "Immich",
-  "short_name": "Immich",
+  "name": "Cloud Gallery",
+  "short_name": "Cloud Gallery",
   "start_url": "/"
 }

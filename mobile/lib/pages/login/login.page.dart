@@ -47,19 +47,19 @@ class LoginPage extends HookConsumerWidget {
                   ),
                 ),
                 const Text(' '),
-                GestureDetector(
-                  child: Text(
-                    'Logs',
-                    style: TextStyle(
-                      color: context.primaryColor,
-                      fontWeight: FontWeight.bold,
-                      fontFamily: "Inconsolata",
-                    ),
-                  ),
-                  onTap: () {
-                    context.pushRoute(const AppLogRoute());
-                  },
-                ),
+               // GestureDetector(
+               //   child: Text(
+              //      'Logs',
+               //     style: TextStyle(
+              //        color: context.primaryColor,
+              //        fontWeight: FontWeight.bold,
+              //        fontFamily: "Inconsolata",
+              //      ),
+              //    ),
+              //    onTap: () {
+              //      context.pushRoute(const AppLogRoute());
+              //    },
+              //  ),
               ],
             ),
           ),
